@@ -61,8 +61,7 @@ jobs:
               )
               for ref in $refs; do
                 rel="${ref#/}"
-                case "$rel" in "") continue ;; esac
-                case "$rel" in *'*'*|*'"'*|*"'"*) continue ;; esac
+                [ -z "$rel" ] && continue
                 case "$rel" in *.js|*.mjs|*.css|*.wasm|*.woff2|*.png|*.svg) : ;; *) continue ;; esac
                 case " $seen " in *" $rel "*) continue ;; esac
                 seen="$seen$rel "
@@ -79,11 +78,13 @@ jobs:
             [ -z "$queue" ] && break
           done
 
+          # Rewrite every asset reference to the project-page path.
+          # Normalise first so nothing ends up double-prefixed.
           find "$out" -type f \( -name '*.html' -o -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.webmanifest' \) -print0 |
-            xargs -0 sed -i "s#/assets/#/$repo/assets/#g; s#\"/manifest.webmanifest\"#\"/$repo/manifest.webmanifest\"#g; s#\"/apple-touch-icon.png\"#\"/$repo/apple-touch-icon.png\"#g"
+            xargs -0 sed -i "s#/$repo/assets/#assets/#g; s#/assets/#assets/#g; s#assets/#/$repo/assets/#g; s#\"/manifest.webmanifest\"#\"/$repo/manifest.webmanifest\"#g; s#\"/apple-touch-icon.png\"#\"/$repo/apple-touch-icon.png\"#g"
 
           echo "mirrored $(find "$out" -type f | wc -l) files, $(du -sh "$out" | cut -f1)"
-          ls -la "$out/assets" | head -30
+          grep -o "/$repo/assets/[A-Za-z0-9._-]*" "$out/index.html" | head -5
 
       - uses: actions/upload-pages-artifact@v3
         with:
