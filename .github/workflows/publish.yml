@@ -18,73 +18,32 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Mirror the built site
+      - name: Build the page
         run: |
-          set -uo pipefail
-          base="https://unkernel.dev"
-          repo="${GITHUB_REPOSITORY#*/}"
-          out="public"
-          mkdir -p "$out"
-          curl -fsSL "$base/" -o "$out/index.html"
-
-          grab() {
-            rel="$1"
-            [ -f "$out/$rel" ] && return 0
-            mkdir -p "$out/$(dirname "$rel")"
-            if curl -fsSL "$base/$rel" -o "$out/$rel"; then return 0; fi
-            rm -f "$out/$rel"
-            return 1
-          }
-
-          for f in \
-            assets/ui-g2aqRuz9.js assets/index-CGNAw_dm.js assets/keys-D9A6ZEDy.js \
-            assets/index-D90Pw360.css assets/boot-rxV9bt3R.css assets/boot-Ba911jvc.js \
-            assets/wasm-inline-DmWnZdLT.js \
-            assets/geist-latin-wght-normal-BgDaEnEv.woff2 \
-            assets/geist-mono-latin-wght-normal-XN7g48iV.woff2 \
-            assets/geist-mono-symbols2-wght-normal-CO5SzqOn.woff2 \
-            assets/logo-Cv3wHR3E.svg manifest.webmanifest apple-touch-icon.png; do
-            grab "$f" || echo "optional missing: $f"
-          done
-
-          queue="index.html"
-          seen=" "
-          for round in 1 2 3 4 5; do
-            next=""
-            for file in $queue; do
-              [ -f "$out/$file" ] || continue
-              refs=$(
-                grep -ohE '(src|href)="/[^"]+"' "$out/$file" 2>/dev/null | sed 's/.*="//;s/"$//'
-                grep -ohE '/assets/[A-Za-z0-9._/-]+' "$out/$file" 2>/dev/null
-                grep -ohE '[A-Za-z0-9._-]+-[A-Za-z0-9_-]{6,}\.(js|mjs|css|wasm|woff2|png|svg)' "$out/$file" 2>/dev/null
-                grep -ohE 'assets/[A-Za-z0-9._/-]+\.(js|mjs|css|wasm|woff2)' "$out/$file" 2>/dev/null
-              )
-              for ref in $refs; do
-                rel="${ref#/}"
-                [ -z "$rel" ] && continue
-                case "$rel" in *.js|*.mjs|*.css|*.wasm|*.woff2|*.png|*.svg) : ;; *) continue ;; esac
-                case " $seen " in *" $rel "*) continue ;; esac
-                seen="$seen$rel "
-                [ -f "$out/$rel" ] && continue
-                if grab "$rel"; then
-                  next="$next $rel"
-                else
-                  alt="assets/$(basename "$rel")"
-                  if [ "$rel" != "$alt" ] && grab "$alt"; then next="$next $alt"; fi
-                fi
-              done
-            done
-            queue="$next"
-            [ -z "$queue" ] && break
-          done
-
-          # Rewrite every asset reference to the project-page path.
-          # Normalise first so nothing ends up double-prefixed.
-          find "$out" -type f \( -name '*.html' -o -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.webmanifest' \) -print0 |
-            xargs -0 sed -i "s#/$repo/assets/#assets/#g; s#/assets/#assets/#g; s#assets/#/$repo/assets/#g; s#\"/manifest.webmanifest\"#\"/$repo/manifest.webmanifest\"#g; s#\"/apple-touch-icon.png\"#\"/$repo/apple-touch-icon.png\"#g"
-
-          echo "mirrored $(find "$out" -type f | wc -l) files, $(du -sh "$out" | cut -f1)"
-          grep -o "/$repo/assets/[A-Za-z0-9._-]*" "$out/index.html" | head -5
+          set -euo pipefail
+          mkdir -p public
+          cat > public/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>unkernel</title>
+              <style>
+                html, body { margin: 0; height: 100%; background: #0b0b0c; }
+                iframe { display: block; width: 100%; height: 100%; border: 0; }
+              </style>
+            </head>
+            <body>
+              <iframe
+                src="https://unkernel.dev/"
+                title="unkernel — a real Linux kernel compiled to WebAssembly"
+                allow="clipboard-read; clipboard-write"
+                referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </body>
+          </html>
+          HTML
+          echo "built $(wc -c < public/index.html) bytes"
 
       - uses: actions/upload-pages-artifact@v3
         with:
