@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Build the page
+      - name: Build the entry page
         run: |
           set -euo pipefail
           mkdir -p public
@@ -29,17 +29,24 @@ jobs:
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1">
               <title>unkernel</title>
+              <meta http-equiv="refresh" content="0; url=https://unkernel.dev/">
               <style>
-                html, body { margin: 0; height: 100%; background: #0b0b0c; }
-                iframe { display: block; width: 100%; height: 100%; border: 0; }
+                html, body { height: 100%; margin: 0; background: #0b0b0c; color: #c9c9cf;
+                  font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+                  display: grid; place-items: center; text-align: center; }
+                a { color: #8ab4ff; }
               </style>
             </head>
             <body>
-              <iframe
-                src="https://unkernel.dev/"
-                title="unkernel — a real Linux kernel compiled to WebAssembly"
-                allow="clipboard-read; clipboard-write"
-                referrerpolicy="no-referrer-when-downgrade"></iframe>
+              <main>
+                <p>Opening unkernel — a real Linux kernel compiled to WebAssembly.</p>
+                <p><a href="https://unkernel.dev/">Open it manually</a> if nothing happens.</p>
+                <p style="opacity:.55;font-size:12.5px;max-width:38em;margin:1.4em auto 0">
+                  Served here as an entry point only. The kernel application resolves its
+                  assets from the site root and refuses to run inside a frame, so it is not
+                  mirrored onto this address.
+                </p>
+              </main>
             </body>
           </html>
           HTML
