@@ -31,14 +31,11 @@ jobs:
             rel="$1"
             [ -f "$out/$rel" ] && return 0
             mkdir -p "$out/$(dirname "$rel")"
-            if curl -fsSL "$base/$rel" -o "$out/$rel"; then
-              return 0
-            fi
+            if curl -fsSL "$base/$rel" -o "$out/$rel"; then return 0; fi
             rm -f "$out/$rel"
             return 1
           }
 
-          # Known entry points (also discoverable below, listed for reliability)
           for f in \
             assets/ui-g2aqRuz9.js assets/index-CGNAw_dm.js assets/keys-D9A6ZEDy.js \
             assets/index-D90Pw360.css assets/boot-rxV9bt3R.css assets/boot-Ba911jvc.js \
@@ -50,32 +47,31 @@ jobs:
             grab "$f" || echo "optional missing: $f"
           done
 
-          # Crawl the asset graph: anything that looks like a hashed build file
           queue="index.html"
           seen=" "
           for round in 1 2 3 4 5; do
             next=""
             for file in $queue; do
               [ -f "$out/$file" ] || continue
-              refs=$( { grep -ohE '(src|href)="/[^"]+"' "$out/$file" | sed 's/.*="//;s/"$//' 2>/dev/null; } \
-                      { grep -ohE '/assets/[A-Za-z0-9._/-]+' "$out/$file" 2>/dev/null; } \
-                      { grep -ohE '[A-Za-z0-9._-]+-[A-Za-z0-9_-]{6,}\.(js|mjs|css|wasm|woff2|png|svg)' "$out/$file" 2>/dev/null; } \
-                      { grep -ohE 'assets/[A-Za-z0-9._/-]+\.(js|mjs|css|wasm|woff2)' "$out/$file" 2>/dev/null; } | sort -u )
+              refs=$(
+                grep -ohE '(src|href)="/[^"]+"' "$out/$file" 2>/dev/null | sed 's/.*="//;s/"$//'
+                grep -ohE '/assets/[A-Za-z0-9._/-]+' "$out/$file" 2>/dev/null
+                grep -ohE '[A-Za-z0-9._-]+-[A-Za-z0-9_-]{6,}\.(js|mjs|css|wasm|woff2|png|svg)' "$out/$file" 2>/dev/null
+                grep -ohE 'assets/[A-Za-z0-9._/-]+\.(js|mjs|css|wasm|woff2)' "$out/$file" 2>/dev/null
+              )
               for ref in $refs; do
                 rel="${ref#/}"
-                case "$rel" in *'"'*|*'*'*|'') continue;; esac
-                case " $seen " in *" $rel "*) continue;; esac
-                case "$rel" in *.js|*.mjs|*.css|*.wasm|*.woff2|*.png|*.svg) : ;; *) continue;; esac
-                if [ -f "$out/$rel" ]; then seen="$seen$rel "; continue; fi
+                case "$rel" in "") continue ;; esac
+                case "$rel" in *'*'*|*'"'*|*"'"*) continue ;; esac
+                case "$rel" in *.js|*.mjs|*.css|*.wasm|*.woff2|*.png|*.svg) : ;; *) continue ;; esac
+                case " $seen " in *" $rel "*) continue ;; esac
+                seen="$seen$rel "
+                [ -f "$out/$rel" ] && continue
                 if grab "$rel"; then
-                  seen="$seen$rel "
                   next="$next $rel"
-                elif [ "$rel" != "assets/${rel#assets/}" ] || true; then
-                  # try it under assets/ as a fallback
-                  if grab "assets/$(basename "$rel")"; then
-                    seen="$seen assets/$(basename "$rel") "
-                    next="$next assets/$(basename "$rel")"
-                  fi
+                else
+                  alt="assets/$(basename "$rel")"
+                  if [ "$rel" != "$alt" ] && grab "$alt"; then next="$next $alt"; fi
                 fi
               done
             done
@@ -83,12 +79,11 @@ jobs:
             [ -z "$queue" ] && break
           done
 
-          # Make root-absolute paths work under /<repo>/
           find "$out" -type f \( -name '*.html' -o -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.webmanifest' \) -print0 |
             xargs -0 sed -i "s#/assets/#/$repo/assets/#g; s#\"/manifest.webmanifest\"#\"/$repo/manifest.webmanifest\"#g; s#\"/apple-touch-icon.png\"#\"/$repo/apple-touch-icon.png\"#g"
 
           echo "mirrored $(find "$out" -type f | wc -l) files, $(du -sh "$out" | cut -f1)"
-          find "$out" -type f -size +1M -printf '%p %s\n'
+          ls -la "$out/assets" | head -30
 
       - uses: actions/upload-pages-artifact@v3
         with:
