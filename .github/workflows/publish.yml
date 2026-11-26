@@ -1,0 +1,69 @@
+name: publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror the built site
+        run: |
+          set -euo pipefail
+          base="https://unkernel.dev"
+          repo="${GITHUB_REPOSITORY#*/}"
+          out="public"
+          mkdir -p "$out"
+          curl -fsSL "$base/" -o "$out/index.html"
+
+          queue="index.html"
+          seen=" index.html "
+          for round in 1 2 3 4; do
+            next=""
+            for file in $queue; do
+              [ -f "$out/$file" ] || continue
+              refs=$( { grep -oE '(src|href)="/[^"]+"' "$out/$file" | sed 's/.*="//;s/"$//'; } || true
+                      { grep -oE '"/assets/[^"]+"' "$out/$file" | tr -d '"'; } || true
+                      { grep -oE '/assets/[A-Za-z0-9._/-]+\.(wasm|js|mjs|css|woff2|png|svg)' "$out/$file"; } || true )
+              for ref in $refs; do
+                rel="${ref#/}"
+                case "$seen" in *" $rel "*) continue;; esac
+                seen="$seen$rel "
+                mkdir -p "$out/$(dirname "$rel")"
+                curl -fsSL "$base/$rel" -o "$out/$rel" || echo "skip $rel"
+                next="$next $rel"
+              done
+            done
+            queue="$next"
+            [ -z "$queue" ] && break
+          done
+
+          find "$out" -type f \( -name '*.html' -o -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.webmanifest' \) -print0 |
+            xargs -0 sed -i "s#/assets/#/$repo/assets/#g; s#\"/manifest.webmanifest\"#\"/$repo/manifest.webmanifest\"#g; s#\"/apple-touch-icon.png\"#\"/$repo/apple-touch-icon.png\"#g"
+
+          echo "mirrored $(find "$out" -type f | wc -l) files, $(du -sh "$out" | cut -f1)"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
